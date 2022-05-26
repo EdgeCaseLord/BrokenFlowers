@@ -55,6 +55,11 @@
 			let singleStepMode = false;
 			let sizeOfNextStep = 0;
 
+			let textureEquirec;
+			const black = new THREE.Color(0x000000);
+			const white = new THREE.Color(0xFFFFFF);
+			const gray = new THREE.Color(0x999999);
+
 			init();
 
 			// Creates random colors, output in #HEXRGB format.
@@ -147,7 +152,13 @@
 					console.log('Error loading');
 				};
 
-				const texloader = new THREE.TextureLoader();
+				const textureLoader = new THREE.TextureLoader(manager);
+
+				textureEquirec = textureLoader.load( './assets/textures/envmap.jpg' );
+				textureEquirec.mapping = THREE.EquirectangularReflectionMapping;
+				textureEquirec.encoding = THREE.sRGBEncoding;
+
+				scene.background = black;
 
 				// let groundMap = texloader.load('./assets/models/textures/M_Ground_diffuse.png');
 				// let groundNormalMap = texloader.load('./assets/models/textures/M_Ground_normal.png');
@@ -250,6 +261,29 @@
 
 			function createPanel() {
 
+				const params = {
+					Black: function () {
+
+						scene.background = black;
+
+					},
+					White: function () {
+
+						scene.background = white;
+
+					},
+					Gray: function () {
+
+						scene.background = gray;
+
+					},
+					Nature: function () {
+
+						scene.background = textureEquirec;
+
+					},
+				};
+
 				const panel = new GUI( { width: 310 } );
 
 			// 	const folder1 = panel.addFolder( 'Visibility' );
@@ -258,6 +292,7 @@
 			// 	const folder4 = panel.addFolder( 'Crossfading' );
 			// 	const folder5 = panel.addFolder( 'Blend Weights' );
 				const folder6 = panel.addFolder( 'General Speed' );
+				const folder7 = panel.addFolder( 'Background' );
 
 				settings = {
 			// 		'show model': true,
@@ -310,6 +345,10 @@
 			// 	folder4.add( settings, 'set custom duration', 0, 10, 0.01 );
 			// 	folder5.add( settings, 'modify idle weight', 0.0, 1.0, 0.01 ).listen().onChange( function ( weight ) {
 
+				folder7.add( params, 'Black' );
+				folder7.add( params, 'White' );
+				folder7.add( params, 'Gray' );
+				folder7.add( params, 'Nature' );
 			// 		setWeight( idleAction, weight );
 
 				// } );
