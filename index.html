@@ -37,14 +37,51 @@
 			import * as THREE from 'three';
 
 			import Stats from './vendor/three/examples/jsm/libs/stats.module.js';
-			// import { GUI } from './vendor/three/examples/jsm/libs/lil-gui.module.min.js';
-			import { GUI } from './vendor/three/examples/jsm/libs/dat.gui.module.js';
+			import { GUI } from './vendor/three/examples/jsm/libs/lil-gui.module.min.js';
+			// import { GUI } from './vendor/three/examples/jsm/libs/dat.gui.module.js';
 			import { GLTFLoader } from './vendor/three/examples/jsm/loaders/GLTFLoader.js';
       		import { OrbitControls } from './vendor/three/examples/jsm/controls/OrbitControls.js';
 
+			// LUT
+			import { EffectComposer } from './vendor/three/examples/jsm/postprocessing/EffectComposer.js';
+			import { RenderPass } from './vendor/three/examples/jsm/postprocessing/RenderPass.js';
+			import { ShaderPass } from './vendor/three/examples/jsm/postprocessing/ShaderPass.js';
+			import { LUTPass } from './vendor/three/examples/jsm/postprocessing/LUTPass.js';
+			import { LUTCubeLoader } from './vendor/three/examples/jsm/loaders/LUTCubeLoader.js';
+			import { LUT3dlLoader } from './vendor/three/examples/jsm/loaders/LUT3dlLoader.js';
+			import { GammaCorrectionShader } from './vendor/three/examples/jsm/shaders/GammaCorrectionShader.js';
+			import { Data3DTexture } from './vendor/three/src/textures/Data3DTexture.js';
+			import { RGBELoader } from './vendor/three/examples/jsm/loaders/RGBELoader.js';
+			import { AxesHelper } from './vendor/three/src/helpers/AxesHelper.js';
+
+			// FXAA
+			import { FXAAShader } from './vendor/three/examples/jsm/shaders/FXAAShader.js';
+			import { CopyShader } from './vendor/three/examples/jsm/shaders/CopyShader.js';
+
+			// DoF
+			import { BokehPass } from './vendor/three/examples/jsm/postprocessing/BokehPass.js';
+
+			// SAO
+			import { SAOPass } from './vendor/three/examples/jsm/postprocessing/SAOPass.js';
+			
+
+			const params = {
+				enabled: true,
+				lut: 'Bourbon 64.CUBE',
+				intensity: 1,
+				use2DLut: false,
+			};
+
+			const lutMap = {
+				'Bourbon 64.CUBE': null
+			};
+
+			let composer, lutPass, fxaaPass, saoPass;
+			// EOF LUT
 
 			let scene, renderer, camera, stats;
 			let model, skeleton, mixer, clock;
+			let flower;
 
 			const crossFadeControls = [];
 
@@ -59,6 +96,8 @@
 			const black = new THREE.Color(0x000000);
 			const white = new THREE.Color(0xFFFFFF);
 			const gray = new THREE.Color(0x999999);
+			
+			const postprocessing = {};
 
 			init();
 
@@ -87,7 +126,7 @@
 
 				// Uncomment the following line for the camera to automatically orbit
 				// controls.autoRotate = true;
-				controls.enableDamping = true;
+				controls.enableDamping = false;
 				controls.maxDistance = 40;
 				// controls.distance = 3;
 				// controls.object.position.set(camera.position.X, camera.position.Y, camera.position.Z);
@@ -105,16 +144,22 @@
 				// scene.fog = new THREE.Fog( 0xa0a0a0, 10, 50 );
 
     
-				const gridHelper = new THREE.GridHelper( size, divisions );
-				scene.add( gridHelper );
+				// const gridHelper = new THREE.GridHelper( size, divisions );
+				// scene.add( gridHelper );
+				// const axesHelper = new THREE.AxesHelper( 5 );
+				// scene.add( axesHelper );
 
-				const hemiLight = new THREE.HemisphereLight( 0xffffff, 0x444444 );
-				hemiLight.position.set( 0, 20, 0 );
+				const hemiLight = new THREE.HemisphereLight( 0xffffff, 0x444444, 1 );
+				hemiLight.position.set( -10, 20, 0 );
 				scene.add( hemiLight );
+				// const hemiLightHelper = new THREE.HemisphereLightHelper( hemiLight, 5 );
+				// scene.add( hemiLightHelper );
 
-				const dirLight = new THREE.DirectionalLight( 0xffffff );
-				dirLight.position.set( - 3, 10, - 10 );
-				dirLight.castShadow = true;
+				const dirLight = new THREE.DirectionalLight( 0xffffff, 2 );
+				dirLight.position.set(  10, 5, 0);
+				// dirLight.castShadow = true;
+				// dirLight.shadowMapWidth = 4096;
+				// dirLight.shadowMapHeight = 4096;
 				// dirLight.shadow.camera.top = 2;
 				// dirLight.shadow.camera.bottom = - 2;
 				// dirLight.shadow.camera.left = - 2;
@@ -122,6 +167,8 @@
 				// dirLight.shadow.camera.near = 0.1;
 				// dirLight.shadow.camera.far = 40;
 				scene.add( dirLight );
+				// const dirLightHelper = new THREE.DirectionalLightHelper( dirLight, 5 );
+				// scene.add( dirLightHelper );
 
 				// scene.add( new THREE.CameraHelper( dirLight.shadow.camera ) );
 
@@ -190,26 +237,64 @@
 				// 		}
 				// 	);
 				// }
-				const loader = new GLTFLoader(manager);
-				loader.load( './assets/models/TulipAnimationTexturedNoModifiers.glb', function ( gltf ) {
+				new RGBELoader()
+					.setPath('./assets/textures/')
+					.load('VizPeople_non_commercial_hdr_v1_01.hdr', function (texture) {
 
-					model = gltf.scene;
-					scene.add( model );
+						texture.mapping = THREE.EquirectangularReflectionMapping;
 
-					model.traverse( function ( object ) {
+						scene.background = texture;
+						scene.environment = texture;
 
-						if ( object.isMesh ) object.castShadow = true;
-						if ( object.name.includes("BezierCurve") && object.isMesh == true ) {
-							object.material.color.set(getRandomColor());
-						}
-						if ( object.name.includes("Plane") && object.isMesh == true ) {
-							object.visible = false;
-						}
-						// if ( object.name == "Tulip" ) {
-						// 	object.material = tulipMat;
-						// }
+						flower = new GLTFLoader(manager);
+						flower.load('./assets/models/Tulip_animation6_11.glb', function (gltf) {
 
-					} );
+							let model = gltf.scene;
+							scene.add(model);
+							model.rotation.y = Math.PI / 3;
+
+							let newColor = getRandomColor();
+							console.log("Color: ", newColor);
+
+							model.traverse(function (child) {
+
+								if (child.isMesh) child.castShadow = true;
+								if (child.name.includes("Petal") && child.isMesh == true) {
+									child.material.color.set(newColor);
+									child.receiveShadow = true;
+								}
+								if (child.name.includes("Plane") && child.isMesh == true) {
+									child.visible = false;
+								}
+								// if ( child.name == "Tulip" ) {
+								// 	child.material = tulipMat;
+								// }
+
+							});
+
+							Object.keys(lutMap).forEach(name => {
+
+								if (/\.CUBE$/i.test(name)) {
+
+									new LUTCubeLoader()
+										.load('./vendor/three/examples/luts/' + name, function (result) {
+
+											lutMap[name] = result;
+
+										});
+
+								} else {
+
+									new LUT3dlLoader()
+										.load('luts/' + name, function (result) {
+
+											lutMap[name] = result;
+
+										});
+
+								}
+
+							});
 
 					//
 
@@ -219,20 +304,26 @@
 
 					//
 
-					createPanel();
 
 
 					//
 
 					const animations = gltf.animations;
-
+					console.log(animations)
 					mixer = new THREE.AnimationMixer( model );
 					
-					animations.forEach( function ( clip ) {
-						mixer.clipAction( clip ).clampWhenFinished = true;
-						mixer.clipAction( clip ).loop = THREE.LoopOnce;
-						mixer.clipAction( clip ).play();
-					} );
+					function playAnimations(animations, mixer) {
+						animations.forEach( function ( clip ) {
+							mixer.clipAction( clip ).clampWhenFinished = true;
+							mixer.clipAction( clip ).loop = THREE.LoopOnce;
+							mixer.clipAction( clip ).play();
+							
+						} );
+						// if (mixer.existingAction(animations[32]))
+						// playAnimations(animations, mixer)
+					}
+					playAnimations(animations, mixer);
+					// mixer.setloop = THREE.LoopRepeat;
 					// idleAction = mixer.clipAction( animations[ 0 ] );
 					// // walkAction = mixer.clipAction( animations[ 3 ] );
 					// // runAction = mixer.clipAction( animations[ 1 ] );
@@ -240,61 +331,130 @@
 					// actions = [ idleAction ] //, walkAction, runAction ];
 
 					// activateAllActions();
+					// playAnimations(animations, mixer);
+					// mixer.clipAction.addEventListener( 'finished', function( e ) { 
+					// 	mixer.clipAction(e).reset;
+					// 	playAnimations(animations, mixer);
+
+					// } ); // properties of e: type, action and direction
+
+				})
+					createPanel();
 
 					animate();
 
 				} );
 
-				renderer = new THREE.WebGLRenderer( { antialias: true } );
+				renderer = new THREE.WebGLRenderer( { antialias: true, precision: "highp" } );
 				renderer.setPixelRatio( window.devicePixelRatio );
 				renderer.setSize( window.innerWidth, window.innerHeight );
 				renderer.outputEncoding = THREE.sRGBEncoding;
+				renderer.toneMapping = THREE.ACESFilmicToneMapping;
+				renderer.toneMappingExposure = 1;
 				renderer.shadowMap.enabled = true;
+				renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+				renderer.physicallyCorrectLights = true;
 				container.appendChild( renderer.domElement );
+
+				
+				const target = new THREE.WebGLRenderTarget( {
+					minFilter: THREE.LinearFilter,
+					magFilter: THREE.LinearFilter,
+					format: THREE.RGBAFormat,
+					encoding: THREE.sRGBEncoding
+				} );
+
+
+				composer = new EffectComposer( renderer, target );
+				composer.setPixelRatio( window.devicePixelRatio );
+				composer.setSize( window.innerWidth, window.innerHeight );
+
+				const renderPass = new RenderPass( scene, camera );
+				renderPass.clearColor = new THREE.Color( 0, 0, 0 );
+				renderPass.clearAlpha = 0;
+
+				const bokehPass = new BokehPass( scene, camera, {
+					focus: 1.0,
+					aperture: 0.5,
+					maxblur: 0.01,
+
+					width: window.innerWidth,
+					height: window.innerHeight
+				} );
+
+				fxaaPass = new ShaderPass( FXAAShader );
+
+				const copyPass = new ShaderPass( CopyShader );
+				const pixelRatio = renderer.getPixelRatio();
+
+				const gammaPass = new ShaderPass( GammaCorrectionShader );
+
+				lutPass = new LUTPass();
+				lutPass.intensity = 0.25;
+
+				fxaaPass.material.uniforms[ 'resolution' ].value.x = 1 / ( container.offsetWidth * pixelRatio );
+				fxaaPass.material.uniforms[ 'resolution' ].value.y = 1 / ( container.offsetHeight * pixelRatio );
+
+
+				composer.addPass( renderPass );
+				composer.addPass( copyPass );
+				composer.addPass( fxaaPass );
+				composer.addPass( bokehPass );
+				composer.addPass( gammaPass );
+				composer.addPass( lutPass );
+
+				postprocessing.composer = composer;
+				postprocessing.bokeh = bokehPass;
+				postprocessing.lut = lutPass;
+				postprocessing.fxaa = fxaaPass;
+				postprocessing.gamma = gammaPass;
+				postprocessing.copy = copyPass;
 
 				stats = new Stats();
 				container.appendChild( stats.dom );
+
 
 				window.addEventListener( 'resize', onWindowResize );
 
 			}
 
-			function createPanel() {
+			function createPanel(postprocessing) {
 
-				const params = {
-					Black: function () {
+				// const params = {
+				// 	Black: function () {
 
-						scene.background = black;
+				// 		scene.background = black;
 
-					},
-					White: function () {
+				// 	},
+				// 	White: function () {
 
-						scene.background = white;
+				// 		scene.background = white;
 
-					},
-					Gray: function () {
+				// 	},
+				// 	Gray: function () {
 
-						scene.background = gray;
+				// 		scene.background = gray;
 
-					},
-					Nature: function () {
+				// 	},
+				// 	Nature: function () {
 
-						scene.background = textureEquirec;
+				// 		scene.background = textureEquirec;
 
-					},
-				};
+				// 	},
+				// };
 
-				const panel = new GUI( { width: 310 } );
+				// const panel = new GUI( { width: 310 } );
 
 			// 	const folder1 = panel.addFolder( 'Visibility' );
 			// 	const folder2 = panel.addFolder( 'Activation/Deactivation' );
 			// 	const folder3 = panel.addFolder( 'Pausing/Stepping' );
 			// 	const folder4 = panel.addFolder( 'Crossfading' );
 			// 	const folder5 = panel.addFolder( 'Blend Weights' );
-				const folder6 = panel.addFolder( 'General Speed' );
-				const folder7 = panel.addFolder( 'Background' );
+				// const folder6 = panel.addFolder( 'General Speed' );
+				// const folder7 = panel.addFolder( 'Background' );
+				// const folder8 = panel.addFolder( 'LUT' );
 
-				settings = {
+				// settings = {
 			// 		'show model': true,
 			// 		'show skeleton': false,
 			// 		'deactivate all': deactivateAllActions,
@@ -321,14 +481,14 @@
 
 			// 			prepareCrossFade( runAction, walkAction, 5.0 );
 
-			// 		},
-					'use default duration': true,
-					'set custom duration': 3.5,
-			// 		'modify idle weight': 0.0,
-			// 		'modify walk weight': 1.0,
-			// 		'modify run weight': 0.0,
-					'modify time scale': 1.0
-				};
+			// // 		},
+			// 		'use default duration': true,
+			// 		'set custom duration': 3.5,
+			// // 		'modify idle weight': 0.0,
+			// // 		'modify walk weight': 1.0,
+			// // 		'modify run weight': 0.0,
+			// 		'modify time scale': 1.0
+			// 	};
 
 			// 	folder1.add( settings, 'show model' ).onChange( showModel );
 			// 	folder1.add( settings, 'show skeleton' ).onChange( showSkeleton );
@@ -345,10 +505,10 @@
 			// 	folder4.add( settings, 'set custom duration', 0, 10, 0.01 );
 			// 	folder5.add( settings, 'modify idle weight', 0.0, 1.0, 0.01 ).listen().onChange( function ( weight ) {
 
-				folder7.add( params, 'Black' );
-				folder7.add( params, 'White' );
-				folder7.add( params, 'Gray' );
-				folder7.add( params, 'Nature' );
+				// folder7.add( params, 'Black' );
+				// folder7.add( params, 'White' );
+				// folder7.add( params, 'Gray' );
+				// folder7.add( params, 'Nature' );
 			// 		setWeight( idleAction, weight );
 
 				// } );
@@ -362,14 +522,53 @@
 			// 		setWeight( runAction, weight );
 
 			// 	} );
-				folder6.add( settings, 'modify time scale', 0.0, 1.5, 0.01 ).onChange( modifyTimeScale );
+				// folder6.add( settings, 'modify time scale', 0.0, 3.0, 0.01 ).onChange( modifyTimeScale );
 
 				// folder1.open();
 				// folder2.open();
 				// folder3.open();
 				// folder4.open();
 				// folder5.open();
-				folder6.open();
+				// folder6.open();
+
+				// let gui = new GUI();
+				// gui.width = 350;
+				// gui.add( params, 'enabled' );
+				// gui.add( params, 'lut', Object.keys( lutMap ) );
+				// gui.add( params, 'intensity' ).min( 0 ).max( 1 );
+
+				// if ( renderer.capabilities.isWebGL2 ) {
+
+				// 	gui.add( params, 'use2DLut' );
+
+				// } else {
+
+				// 	params.use2DLut = true;
+
+				// }
+
+				
+				// const effectController = {
+
+				// 	focus: 500.0,
+				// 	aperture: 5,
+				// 	maxblur: 0.01
+
+				// };
+
+				// const matChanger = function ( ) {
+
+				// 	postprocessing.bokeh.uniforms[ 'focus' ].value = effectController.focus;
+				// 	postprocessing.bokeh.uniforms[ 'aperture' ].value = effectController.aperture * 0.00001;
+				// 	postprocessing.bokeh.uniforms[ 'maxblur' ].value = effectController.maxblur;
+
+				// };
+				
+				// gui.add( effectController, 'focus', 10.0, 3000.0, 10 ).onChange( matChanger );
+				// gui.add( effectController, 'aperture', 0, 10, 0.1 ).onChange( matChanger );
+				// gui.add( effectController, 'maxblur', 0.0, 0.01, 0.001 ).onChange( matChanger );
+
+				// matChanger();
 
 			}
 
@@ -605,6 +804,14 @@
 				camera.updateProjectionMatrix();
 
 				renderer.setSize( window.innerWidth, window.innerHeight );
+				composer.setSize( window.innerWidth, window.innerHeight );
+
+				const pixelRatio = renderer.getPixelRatio();
+
+				fxaaPass.material.uniforms[ 'resolution' ].value.x = 1 / ( container.innerWidth * pixelRatio );
+				fxaaPass.material.uniforms[ 'resolution' ].value.y = 1 / ( container.innerHeight * pixelRatio );
+
+				animate();
 
 			}
 
@@ -643,9 +850,19 @@
 
 				mixer.update( mixerUpdateDelta );
 
+
+				// lutPass.enabled = params.enabled && Boolean( lutMap[ params.lut ] );
+				// if ( lutMap[ params.lut ] ) {
+
+				// 	const lut = lutMap[ params.lut ];
+				// 	lutPass.lut = params.use2DLut ? lut.texture : lut.texture3D;
+
+				// }
+
 				stats.update();
 
-				renderer.render( scene, camera );
+				composer.render();
+				// renderer.render( scene, camera );
 
 			}
 
